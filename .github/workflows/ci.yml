@@ -1,0 +1,55 @@
+name: CI
+
+# This is what makes it "automation" rather than just "a test you remember
+# to run": GitHub triggers this workflow by itself, on every push and every
+# pull request, with zero action from you.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # GitHub Actions spins up a real, throwaway Postgres container for the
+    # duration of this job — same idea as your docker-compose "db" service,
+    # just provisioned by GitHub instead of by you.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: inventory
+          POSTGRES_PASSWORD: inventory
+          POSTGRES_DB: inventoryflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U inventory -d inventoryflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run pytest suite
+        working-directory: backend
+        env:
+          # Inside GitHub Actions the Postgres service is reachable at
+          # "localhost", not "db" — "db" only means something inside your
+          # docker-compose network on your own machine.
+          TEST_DATABASE_URL: postgresql://inventory:inventory@localhost:5432/inventoryflow_test
+          SECRET_KEY: ci-test-secret-key
+        run: pytest app/tests -v
