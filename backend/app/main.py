@@ -1,6 +1,7 @@
 import os
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .auth import hash_password
@@ -8,6 +9,19 @@ from .database import engine, SessionLocal
 from .routers import auth, products, orders, users
 
 app = FastAPI(title="InventoryFlow API")
+
+# The frontend (localhost:5173) and this API (localhost:8000) are different
+# origins as far as the browser is concerned — different ports count as
+# different origins. Without this, the browser blocks the frontend's fetch()
+# calls before they even reach this server, with a fairly cryptic console
+# error. This explicitly allows the Vite dev server's origin to call this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Week 1 simplicity: create tables directly from models on startup.
 # Swap this for Alembic migrations once the schema stabilizes (Week 4 stretch goal).
