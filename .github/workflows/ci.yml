@@ -1,8 +1,5 @@
 name: CI
 
-# This is what makes it "automation" rather than just "a test you remember
-# to run": GitHub triggers this workflow by itself, on every push and every
-# pull request, with zero action from you.
 on:
   push:
     branches: [main]
@@ -13,9 +10,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    # GitHub Actions spins up a real, throwaway Postgres container for the
-    # duration of this job — same idea as your docker-compose "db" service,
-    # just provisioned by GitHub instead of by you.
     services:
       postgres:
         image: postgres:16
@@ -47,9 +41,46 @@ jobs:
       - name: Run pytest suite
         working-directory: backend
         env:
-          # Inside GitHub Actions the Postgres service is reachable at
-          # "localhost", not "db" — "db" only means something inside your
-          # docker-compose network on your own machine.
           TEST_DATABASE_URL: postgresql://inventory:inventory@localhost:5432/inventoryflow_test
           SECRET_KEY: ci-test-secret-key
         run: pytest app/tests -v
+
+  build-and-push:
+    name: Build and push image to ECR
+    needs: test
+    # Only run on an actual push to main — never for pull requests, so a
+    # branch someone else opens can't trigger an image push to your registry.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required so GitHub can request the OIDC token
+      contents: read
+    env:
+      AWS_REGION: us-east-2
+      ECR_REPOSITORY: inventoryflow-api
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Assume the IAM role via OIDC (no stored AWS keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::875115942176:role/github-actions-ecr-push-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push the image
+        working-directory: backend
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build \
+            -t $REGISTRY/$ECR_REPOSITORY:latest \
+            -t $REGISTRY/$ECR_REPOSITORY:${{ github.sha }} \
+            .
+          docker push $REGISTRY/$ECR_REPOSITORY:latest
+          docker push $REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
