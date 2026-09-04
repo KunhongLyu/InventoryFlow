@@ -17,7 +17,8 @@ app = FastAPI(title="InventoryFlow API")
 # error. This explicitly allows the Vite dev server's origin to call this API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173",
+    "http://inventoryflow-frontend-kl52352.s3-website.us-east-2.amazonaws.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
