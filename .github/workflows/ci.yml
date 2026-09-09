@@ -84,4 +84,3 @@ jobs:
             .
           docker push $REGISTRY/$ECR_REPOSITORY:latest
           docker push $REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
-          
